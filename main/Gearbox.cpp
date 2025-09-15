@@ -8,10 +8,12 @@
 #define TAG "Gearbox"
 
 int target_x = GM_MIDDLE;
+int previous_x = GM_MIDDLE;
 int target_y = GM_MIDDLE;
 int gearbox_state = GM_INIT;
 int gearbox_virtual_position = 0;
 int target_gear = 0;
+bool is_manual_remove = true;
 
 void set_gear(int target) {
     if (gearbox_state != GM_READY && target != 0) {
@@ -26,6 +28,7 @@ void set_gear(int target) {
     ESP_LOGI(TAG, "target gear: %d", target);
 
     target_gear = target;
+    previous_x = target_x;
     if (target == 0) {
         target_y = GM_MIDDLE;
         // target_x = GM_MIDDLE;
@@ -75,14 +78,17 @@ void gearbox_task(void* args) {
             }
             else {
                 int64_t stageTimer = esp_timer_get_time();
-                motorY.target = motorY.middle;
-                motorY.enable();
-                while (motorY.getPosition() != GM_MIDDLE) vTaskDelay(10 / portTICK_PERIOD_MS);
-                vTaskDelay(200 / portTICK_PERIOD_MS);
+                if (is_manual_remove || target_x != previous_x) {
+                    motorY.target = motorY.middle;
+                    motorY.enable();
+                    while (motorY.getPosition() != GM_MIDDLE) vTaskDelay(10 / portTICK_PERIOD_MS);
+                    vTaskDelay(200 / portTICK_PERIOD_MS);
+                }
                 uint8_t attemptsCount = 4;
 BOTH_AXIS_SWITCH:
                 if (attemptsCount == 0) {
                     gearbox_state = GM_READY;
+                    is_manual_remove = true;
                     motorX.disable();
                     motorY.disable();
                     continue;
@@ -93,7 +99,7 @@ BOTH_AXIS_SWITCH:
                     motorX.target = motorX.getFloatPosition(target_x);
                     motorX.enable();
                     stageTimer = esp_timer_get_time();
-                    while (motorX.getPosition() != target_x && esp_timer_get_time() - stageTimer < 1500000) {
+                    while (motorX.getPosition() != target_x && esp_timer_get_time() - stageTimer < 2000000) {
                         motorX.target = motorX.getFloatPosition(target_x);
                         vTaskDelay(10 / portTICK_PERIOD_MS);
                     }
@@ -127,6 +133,11 @@ BOTH_AXIS_SWITCH:
                 motorY.disable();
             }
         }
+        else if (gearbox_state == GM_READY) {
+            if (motorY.getPosition() == GM_MIDDLE && target_gear != 0) {
+                is_manual_remove = true;
+            }
+        }
         
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }
@@ -140,12 +151,5 @@ bool get_gearbox_ready() {
 }
 
 int get_current_gear() {
-    // if (motorX.getPosition() == GM_LOW && motorY.getPosition() == GM_LOW) return 1;
-    // if (motorX.getPosition() == GM_LOW && motorY.getPosition() == GM_HIGH) return 2;
-    // if (motorX.getPosition() == GM_MIDDLE && motorY.getPosition() == GM_LOW) return 3;
-    // if (motorX.getPosition() == GM_MIDDLE && motorY.getPosition() == GM_HIGH) return 4;
-    // if (motorX.getPosition() == GM_HIGH && motorY.getPosition() == GM_LOW) return 5;
-    // if (motorX.getPosition() == GM_HIGH && motorY.getPosition() == GM_HIGH) return 6;
-    // return 0;
     return gearbox_virtual_position;
 }

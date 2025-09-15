@@ -5,6 +5,8 @@ extern int target_x;
 extern int target_y;
 extern int gearbox_state;
 extern int gearbox_virtual_position;
+extern int target_gear;
+extern bool is_manual_remove;
 
 
 void set_gear(int target);
